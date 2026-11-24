@@ -2,16 +2,20 @@ package com.domeet.backend.auth.service;
 
 import com.domeet.backend.auth.service.SocialLoginMemberLookup.Result;
 import com.domeet.backend.auth.service.SocialLoginMemberLookup.State;
-import org.junit.jupiter.api.BeforeEach;
+import java.sql.SQLException;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest
 @Transactional
@@ -23,54 +27,92 @@ class SocialLoginMemberLookupPostgresTests {
 	@Autowired
 	private SocialLoginMemberLookup memberLookup;
 
-	@BeforeEach
-	void prepareTemporaryTables() {
-		jdbcClient.sql("""
-				CREATE TEMP TABLE users (
-				    id BIGINT PRIMARY KEY,
-				    status VARCHAR(20) NOT NULL
-				) ON COMMIT DROP
-				""").update();
-		jdbcClient.sql("""
-				CREATE TEMP TABLE social_accounts (
-				    user_id BIGINT NOT NULL REFERENCES pg_temp.users(id),
-				    provider VARCHAR(20) NOT NULL,
-				    provider_user_id VARCHAR(255) NOT NULL,
-				    UNIQUE (provider, provider_user_id),
-				    UNIQUE (user_id, provider)
-				) ON COMMIT DROP
-				""").update();
-		jdbcClient.sql("""
-				INSERT INTO pg_temp.users (id, status) VALUES
-				    (42, 'ACTIVE'), (43, 'PENDING'), (44, 'WITHDRAWN'), (45, 'ACTIVE'), (46, 'ACTIVE')
-				""").update();
-		jdbcClient.sql("""
-				INSERT INTO pg_temp.social_accounts (user_id, provider, provider_user_id) VALUES
-				    (42, 'GOOGLE', 'active-subject'),
-				    (43, 'GOOGLE', 'pending-subject'),
-				    (44, 'GOOGLE', 'withdrawn-subject'),
-				    (45, 'KAKAO', 'active-subject'),
-				    (46, 'KAKAO', 'kakao-only-subject')
-				""").update();
-	}
-
 	@ParameterizedTest
 	@CsvSource({
-			"active-subject, EXISTING_MEMBER, 42",
-			"pending-subject, SIGNUP_INCOMPLETE, 43",
-			"withdrawn-subject, WITHDRAWN_MEMBER, 44"
+			"ACTIVE, EXISTING_MEMBER",
+			"PENDING, SIGNUP_INCOMPLETE",
+			"WITHDRAWN, WITHDRAWN_MEMBER"
 	})
-	void findsAndClassifiesGoogleMember(String subject, State state, Long memberId) {
+	void findsAndClassifiesGoogleMember(String status, State state) {
+		String subject = UUID.randomUUID().toString();
+		long memberId = insertUser(status);
+		linkAccount(memberId, "GOOGLE", subject);
+		linkAccount(insertUser("ACTIVE"), "KAKAO", subject);
+
 		assertEquals(new Result(state, memberId), memberLookup.findGoogleMember(subject));
 	}
 
 	@Test
 	void doesNotMatchAnAccountFromAnotherProvider() {
-		assertEquals(new Result(State.NO_LINKED_MEMBER, null), memberLookup.findGoogleMember("kakao-only-subject"));
+		String subject = UUID.randomUUID().toString();
+		linkAccount(insertUser("ACTIVE"), "KAKAO", subject);
+
+		assertEquals(new Result(State.NO_LINKED_MEMBER, null), memberLookup.findGoogleMember(subject));
 	}
 
 	@Test
 	void returnsNoLinkedMemberForUnknownSubject() {
-		assertEquals(new Result(State.NO_LINKED_MEMBER, null), memberLookup.findGoogleMember("unknown-subject"));
+		assertEquals(new Result(State.NO_LINKED_MEMBER, null),
+				memberLookup.findGoogleMember(UUID.randomUUID().toString()));
+	}
+
+	@Test
+	void rejectsSocialAccountWithoutMember() {
+		long memberId = insertUser("PENDING");
+		jdbcClient.sql("DELETE FROM users WHERE id = :id").param("id", memberId).update();
+
+		assertSqlState("23503", () -> linkAccount(memberId, "GOOGLE", UUID.randomUUID().toString()));
+	}
+
+	@Test
+	void rejectsLinkingSameProviderAccountToAnotherMember() {
+		String subject = UUID.randomUUID().toString();
+		linkAccount(insertUser("ACTIVE"), "GOOGLE", subject);
+		long otherMemberId = insertUser("PENDING");
+
+		assertSqlState("23505", () -> linkAccount(otherMemberId, "GOOGLE", subject));
+	}
+
+	@Test
+	void rejectsLinkingSecondAccountFromSameProviderToMember() {
+		long memberId = insertUser("ACTIVE");
+		linkAccount(memberId, "GOOGLE", UUID.randomUUID().toString());
+
+		assertSqlState("23505", () -> linkAccount(memberId, "GOOGLE", UUID.randomUUID().toString()));
+	}
+
+	@Test
+	void rejectsUnknownMemberStatus() {
+		assertSqlState("23514", () -> insertUser("UNKNOWN"));
+	}
+
+	@Test
+	void rejectsUnknownProvider() {
+		long memberId = insertUser("PENDING");
+
+		assertSqlState("23514", () -> linkAccount(memberId, "UNKNOWN", UUID.randomUUID().toString()));
+	}
+
+	private long insertUser(String status) {
+		return jdbcClient.sql("INSERT INTO users (status) VALUES (:status) RETURNING id")
+				.param("status", status)
+				.query(Long.class)
+				.single();
+	}
+
+	private void linkAccount(long memberId, String provider, String subject) {
+		jdbcClient.sql("""
+				INSERT INTO social_accounts (user_id, provider, provider_user_id)
+				VALUES (:memberId, :provider, :subject)
+				""")
+				.param("memberId", memberId)
+				.param("provider", provider)
+				.param("subject", subject)
+				.update();
+	}
+
+	private void assertSqlState(String expected, Executable operation) {
+		var exception = assertThrows(DataIntegrityViolationException.class, operation);
+		assertEquals(expected, ((SQLException) exception.getMostSpecificCause()).getSQLState());
 	}
 }
