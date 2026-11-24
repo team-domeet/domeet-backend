@@ -11,7 +11,7 @@
 | 특정 테스트 | `.\gradlew.bat test --tests 'com.domeet.backend.BackendApplicationTests'` | `./gradlew test --tests 'com.domeet.backend.BackendApplicationTests'` |
 | 로컬 실행 | `.\gradlew.bat bootRun` | `./gradlew bootRun` |
 
-현재 `application.yaml`에는 데이터소스가 설정되어 있지 않다. 애플리케이션 실행과 컨텍스트 테스트에는 로컬 또는 테스트용 PostgreSQL 연결 설정을 제공한다.
+`application.yaml`은 기본적으로 로컬 PostgreSQL의 `domeet` DB에 연결한다. 애플리케이션 실행과 컨텍스트 테스트에는 `DOMEET_DB_PASSWORD` 환경변수 또는 지정된 PostgreSQL 연결 설정을 제공한다.
 
 ## 작업 원칙
 
@@ -61,7 +61,7 @@
 
 이 범위는 Spring Boot 실행 설정과 향후 PostgreSQL 마이그레이션을 다룬다. 공통 설정은 `application.yaml`에 둔다. 로컬 실행과 통합 테스트는 각각 지정된 PostgreSQL 연결을 사용한다.
 
-- MVP 논리 테이블 40개는 검수를 마쳤다. 물리 DDL은 검증 전이며 마이그레이션 도구는 현재 빌드에 선언되어 있지 않다. `chat_notification_settings`는 후속 범위다. [스키마 설계](https://app.notion.com/p/4d5f7bfe3aab822cb59181283e740f40)
+- MVP 논리 테이블 40개는 검수를 마쳤다. Spring Boot 시작 시 Flyway가 `src/main/resources/db/migration`의 마이그레이션을 적용한다. 첫 마이그레이션은 AUTH-002의 `users`와 `social_accounts`를 생성한다. `chat_notification_settings`는 후속 범위다. [스키마 설계](https://app.notion.com/p/4d5f7bfe3aab822cb59181283e740f40)
 - 스키마 변경은 승인된 논리 설계를 먼저 갱신하고 마이그레이션으로 반영한다. 테이블명은 복수형, 컬럼명은 영어 snake_case를 사용한다. [테이블 상세 명세](https://app.notion.com/p/416f7bfe3aab811f85fcd50d790cdb53)
 
 ### PostgreSQL 제약과 삭제 정책
