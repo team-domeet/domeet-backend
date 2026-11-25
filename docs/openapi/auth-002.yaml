@@ -4,8 +4,9 @@ info:
   version: 0.1.0
   description: |
     이슈 #1에서 검토할 AUTH-002 계약 초안이다.
-    현재 서버의 Google 토큰 검증과 회원 조회는 개발 중이다. 세션 발급,
-    가입 응답, 로그인 시도 발급과 카카오·Apple 검증은 후속 구현 범위다.
+    현재 서버는 Google 토큰 검증과 회원 조회를 수행하고 미연결 Google 계정에
+    가입 진입 응답을 반환한다. 세션 발급, 가입 재개 응답, 로그인 시도 발급과
+    카카오·Apple 검증은 후속 구현 범위다.
     실제 인증 정보는 HTTPS로 전송한다.
 paths:
   /api/v1/auth/social-login-attempts:
@@ -131,6 +132,8 @@ paths:
                   value: {code: ACCOUNT_RESTRICTED, restrictionType: SUSPENSION}
                 permanentSuspension:
                   value: {code: ACCOUNT_RESTRICTED, restrictionType: PERMANENT_SUSPENSION}
+        '501':
+          description: 현재 구현 범위에 포함되지 않은 제공자 또는 연결된 회원의 후속 처리. 응답 본문 없음.
         '503':
           $ref: '#/components/responses/Unavailable'
 components:
@@ -173,7 +176,10 @@ components:
         signupToken:
           type: string
           minLength: 1
-          description: AUTH-001 가입에서만 쓸 서버 발급 토큰. 전달 위치와 유효기간은 AUTH-001 계약에서 정한다.
+          description: |
+            발급 후 15분 동안 유효한 AUTH-001 가입 전용 서명 토큰이다.
+            후속 AUTH-001 요청의 Authorization 헤더에 Bearer 토큰으로 전달한다.
+            만료되면 Google 인증을 다시 거쳐 새 가입 토큰을 발급받는다.
         nextStep:
           type: string
           enum: [TERMS, IDENTITY_VERIFICATION, PROFILE]

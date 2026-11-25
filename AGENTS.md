@@ -13,6 +13,8 @@
 
 `application.yaml`은 기본적으로 로컬 PostgreSQL의 `domeet` DB에 연결한다. 애플리케이션 실행과 컨텍스트 테스트에는 `DOMEET_DB_PASSWORD` 환경변수 또는 지정된 PostgreSQL 연결 설정을 제공한다.
 
+Google 가입 진입을 로컬에서 확인하려면 백엔드 실행 설정에 `DOMEET_GOOGLE_CLIENT_ID`와 `DOMEET_SIGNUP_TOKEN_SECRET`을 설정한다. 가입 토큰 서명 키에는 암호학적으로 무작위인 32바이트 이상을 표준 Base64로 인코딩한 값을 사용한다.
+
 ## 작업 원칙
 
 - 요청받지 않은 기능이나 구조를 임의로 추가하지 않는다.
