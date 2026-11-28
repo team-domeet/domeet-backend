@@ -17,6 +17,8 @@ Google 가입 진입을 로컬에서 확인하려면 백엔드 실행 설정에 
 
 ## 작업 원칙
 
+포트원 본인인증 테스트에는 등록한 V2 테스트 채널의 `PORTONE_STORE_ID`, `PORTONE_IDENTITY_VERIFICATION_CHANNEL_KEY`와 서버 전용 `PORTONE_API_SECRET`을 로컬 실행 환경에 제공한다.
+
 개발 환경에서 초안 약관 동의 API를 확인하려면 `DOMEET_DRAFT_TERMS_ENABLED=true`를 설정한다. 초안은 검증용이며 기본 설정에서는 동의를 받지 않는다.
 
 - 요청받지 않은 기능이나 구조를 임의로 추가하지 않는다.

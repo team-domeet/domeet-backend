@@ -54,7 +54,87 @@ paths:
           description: 연결된 회원의 상태나 가입 단계가 이 요청을 허용하지 않는다. 오류 코드는 SIGNUP_STATE_CONFLICT이다.
         '503':
           description: 초안 동의 처리가 비활성 상태이거나 저장소·토큰 검증을 사용할 수 없다. 오류 코드는 SIGNUP_TERMS_UNAVAILABLE이다.
+  /api/v1/auth/signup/identity-verifications:
+    post:
+      operationId: startSignupIdentityVerification
+      summary: 가입 본인인증 테스트 시도 발급
+      description: |
+        본인인증 단계의 PENDING 회원에게 새 ID를 발급한다.
+        시도는 최대 15분이며 현재 가입 토큰의 만료 시각을 넘지 않는다.
+        취소 또는 실패 후에는 새 시도를 발급받는다.
+      security:
+        - SignupToken: []
+      responses:
+        '201':
+          description: 발급된 포트원 SDK 요청 정보
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [identityVerificationId, storeId, channelKey, expiresAt]
+                properties:
+                  identityVerificationId: {type: string, format: uuid}
+                  storeId: {type: string}
+                  channelKey: {type: string}
+                  expiresAt: {type: string, format: date-time}
+        '401':
+          $ref: '#/components/responses/InvalidSignupToken'
+        '409':
+          description: 회원의 상태나 가입 단계가 적합하지 않다. 오류 코드는 SIGNUP_STATE_CONFLICT다.
+        '503':
+          $ref: '#/components/responses/IdentityVerificationUnavailable'
+  /api/v1/auth/signup/identity-verifications/{id}/confirm:
+    post:
+      operationId: confirmSignupIdentityVerification
+      summary: 포트원 본인인증 테스트 결과 확인
+      description: |
+        서버가 포트원 V2 단건 조회로 인증 ID, 테스트 채널, VERIFIED 상태를 확인한다.
+        유효기간 내 재확인은 기존 확인 결과를 반환한다.
+        생년월일과 CI의 제공 여부만 반환하며 가입 단계는 유지한다.
+      security:
+        - SignupToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: 인증 완료 확인
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, birthDateAvailable, ciAvailable]
+                properties:
+                  status: {type: string, enum: [VERIFIED]}
+                  birthDateAvailable: {type: boolean}
+                  ciAvailable: {type: boolean}
+        '400':
+          description: 인증 시도 ID가 UUID 형식이 아니다.
+        '401':
+          $ref: '#/components/responses/InvalidSignupToken'
+        '404':
+          description: 이 회원이 확인할 수 있는 시도가 없다. 오류 코드는 IDENTITY_VERIFICATION_ATTEMPT_NOT_FOUND다.
+        '409':
+          description: 시도가 만료됐거나 인증이 완료되지 않았거나 가입 상태가 변경됐다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code]
+                properties:
+                  code:
+                    type: string
+                    enum: [IDENTITY_VERIFICATION_ATTEMPT_EXPIRED, IDENTITY_VERIFICATION_NOT_COMPLETED, SIGNUP_STATE_CONFLICT]
+        '503':
+          $ref: '#/components/responses/IdentityVerificationUnavailable'
 components:
+  responses:
+    InvalidSignupToken:
+      description: 가입 토큰이 없거나 유효하지 않다. 오류 코드는 INVALID_SIGNUP_TOKEN이다.
+    IdentityVerificationUnavailable:
+      description: 연동 설정, 포트원 조회 또는 저장소를 사용할 수 없다. 오류 코드는 IDENTITY_VERIFICATION_UNAVAILABLE이다.
   securitySchemes:
     SignupToken:
       type: http

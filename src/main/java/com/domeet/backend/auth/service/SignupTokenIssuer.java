@@ -66,6 +66,10 @@ public class SignupTokenIssuer {
 	}
 
 	public String verifyGoogleSubject(String value) {
+		return verifyGoogleToken(value).subject();
+	}
+
+	public VerifiedGoogleToken verifyGoogleToken(String value) {
 		if (signingKey.length == 0) {
 			throw new JwtEncodingException("Signup token signing key is not configured");
 		}
@@ -87,9 +91,12 @@ public class SignupTokenIssuer {
 					|| (claims.getNotBeforeTime() != null && claims.getNotBeforeTime().toInstant().isAfter(now))) {
 				throw new BadJwtException("Invalid signup token");
 			}
-			return claims.getSubject();
+			return new VerifiedGoogleToken(claims.getSubject(), claims.getExpirationTime().toInstant());
 		} catch (ParseException | JOSEException exception) {
 			throw new BadJwtException("Invalid signup token");
 		}
+	}
+
+	public record VerifiedGoogleToken(String subject, Instant expiresAt) {
 	}
 }
